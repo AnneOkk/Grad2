@@ -1,0 +1,319 @@
+---
+title: 'Grad2)'
+author: "Anne-Kathrin Kleine"
+date: "2/27/2020"
+output:
+  html_document:
+    number_sections: yes
+    toc: yes
+    toc_depth: 1
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '1'
+---
+   
+# Preselection 
+
+```{r loading_packs, eval = T, include = F, echo = F}
+knitr::opts_chunk$set(include = T, echo = T, warning = F, message = F)
+ipak <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if (length(new.pkg)) 
+    install.packages(new.pkg, dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
+
+packages <- c("mediation", "foreign", "tidyverse","stargazer","multicon", "ggplot2", "plyr", "reshape2", "readxl", 
+              "scales", "grid", "tidyLPA", "Rcpp", "naniar", "dplyr", "car", "mice", 
+              "rstudioapi", "labelled", "modi", "semPlot", "kulife")
+ipak(packages)
+```
+
+```{r}
+ #library(rstudioapi)
+# set_wd <- function() {
+# current_path <- getActiveDocumentContext()$path 
+#  setwd(dirname(current_path ))
+#  print( getwd() )
+ # }
+# set_wd()
+```
+
+```{r}
+
+options(knitr.table.format = function() {
+  if (knitr::is_latex_output()) 'latex' else 'pandoc'
+})
+
+library(rlang)
+library(tidyverse)
+library(foreign)
+files <- dir(getwd(), pattern = "\\.sav$", full.names = FALSE) 
+df_list <- vector("list", length(files))
+names(df_list) <- files
+read_in <- function(df = files) {
+  for (fname in df) {
+    df_list[[fname]] <- haven::read_sav(fname, encoding = NULL, user_na = FALSE, col_select = NULL,skip = 0, n_max = Inf, .name_repair = "unique") 
+  }
+    names(df_list) <- gsub(".sav","",names(df_list))
+    ff <- df_list
+}
+
+
+df_list <- read_in(files)
+
+list2env(df_list,envir=.GlobalEnv)
+
+pre_df <- as.data.frame(Grad2_Preselection) %>% 
+  dplyr::rename(
+    DurationT1 = Duration__in_seconds_
+    )
+
+```
+
+```{r}
+# filter out all those with status != 0
+pre_df <- pre_df[!(pre_df$Status!=0),]
+pre_df <- pre_df[!is.na(pre_df$Status),]
+
+# select random sample based on language distribution 
+no_english_df <- pre_df$P_lang == 2 # find row numbers where lang == 2
+perc.10<- round(sum(no_english_df, na.rm = T) * 0.1) # cut sample by 10%
+no_english <- which(no_english_df == TRUE)
+sampled.10 <- sample(no_english, perc.10) 
+pre_df_sel <- pre_df[-sampled.10, ] # in your final output, include all but the 10%
+
+nrow(pre_df)
+nrow(pre_df_sel)
+
+# filter out those who do not graduate this year 
+pre_df_sel <- pre_df_sel[!(pre_df_sel$P_gradyear_1.0!=1),]
+# filter out those who indicate <60% likelihood of graduating this year 
+pre_df_sel <- pre_df_sel[!(pre_df_sel$P_anti_1 <= 60),]
+
+```
+
+## Sample sizes
+
+### Full sample
+```{r}
+nrow(pre_df)
+```
+
+### those graduating in 2020
+```{r}
+nrow(pre_df_sel)
+```
+
+
+## Effects of coronacrisis on job prospects {.tabset}
+
+### Full sample 
+
+```{r include = T}
+mean(pre_df$P_jobcorona_1, na.rm = T)
+hist(pre_df$P_jobcorona_1, main = "Effects of coronacrisis on job prospects", xlab = "Magnitude", ylab = "Count", breaks = "Sturges")
+```
+
+### Selected sample (graduating in 2020)
+
+```{r include = T}
+mean(pre_df_sel$P_jobcorona_1, na.rm = T)
+hist(pre_df_sel$P_jobcorona_1, main = "Effects of coronacrisis on job prospects", xlab = "Magnitude", ylab = "Count", breaks = "Sturges")
+```
+
+## Graduation date - delay due to corona crisis {.tabset}
+
+### Full sample 
+
+```{r include = T}
+pre_df$P_gradyear_diff <- (pre_df$P_gradyear_1.0 - pre_df$P_gradyear_1)
+pre_df$P_gradmonth_diff <- (pre_df$P_gradmonth_1.0 - pre_df$P_gradmonth_1)
+
+pre_df$P_gradyear_diff <- pre_df$P_gradyear_diff*12
+pre_df$P_grad_diff <- pre_df$P_gradyear_diff + pre_df$P_gradmonth_diff
+
+mean(pre_df$P_grad_diff, na.rm = T)
+barplot(table(pre_df$P_grad_diff),
+        main = "Graduation date delay due to coronavirus crisis", 
+        xlab = "Delay in months", 
+        ylab = "Count",
+        col = "blue",
+        density = 30)
+```
+
+### Selected sample (graduating in 2020)
+
+```{r include = T}
+pre_df_sel$P_gradyear_diff <- (pre_df_sel$P_gradyear_1.0 - pre_df_sel$P_gradyear_1)
+pre_df_sel$P_gradmonth_diff <- (pre_df_sel$P_gradmonth_1.0 - pre_df_sel$P_gradmonth_1)
+
+pre_df_sel$P_gradyear_diff <- pre_df_sel$P_gradyear_diff*12
+pre_df_sel$P_grad_diff <- pre_df_sel$P_gradyear_diff + pre_df_sel$P_gradmonth_diff
+
+mean(pre_df_sel$P_grad_diff, na.rm = T)
+
+barplot(table(pre_df_sel$P_grad_diff),
+        main = "Graduation date delay due to coronavirus crisis", 
+        xlab = "Delay in months", 
+        ylab = "Count",
+        col = "blue",
+        density = 30)
+```
+
+## Anticipations (Selected sample)
+
+```{r include = T}
+mean(pre_df_sel$P_anti_1, na.rm = T)
+hist(pre_df_sel$P_anti_1, main = "Likelihood of graduationg from university", xlab = "Likelihood", ylab = "Count", breaks = "Sturges")
+```
+
+```{r include = T}
+mean(pre_df_sel$P_anti_2, na.rm = T)
+hist(pre_df_sel$P_anti_2, main = "Likelihood of starting full-time employment", xlab = "Likelihood", ylab = "Count", breaks = "Sturges")
+```
+
+```{r include = T}
+mean(pre_df_sel$P_anti_3, na.rm = T)
+hist(pre_df_sel$P_anti_3, main = "Likelihood of starting part-time employment", xlab = "Likelihood", ylab = "Count", breaks = "Sturges")
+```
+
+```{r include = T}
+mean(pre_df_sel$P_anti_4, na.rm = T)
+hist(pre_df_sel$P_anti_4, main = "Likelihood of starting to work self-employed", xlab = "Likelihood", ylab = "Count", breaks = "Sturges")
+```
+
+```{r include = T}
+mean(pre_df_sel$P_anti_5, na.rm = T)
+hist(pre_df_sel$P_anti_5, main = "Likelihood of starting an internship", xlab = "Likelihood", ylab = "Count", breaks = "Sturges")
+```
+
+```{r include = T}
+mean(pre_df_sel$P_anti_6, na.rm = T)
+hist(pre_df_sel$P_anti_6, main = "Likelihood of becoming unemployed", xlab = "Likelihood", ylab = "Count", breaks = "Sturges")
+```
+
+```{r include = T}
+mean(pre_df_sel$P_anti_7, na.rm = T)
+hist(pre_df_sel$P_anti_7, main = "Likelihood of starting a new study", xlab = "Likelihood", ylab = "Count", breaks = "Sturges")
+```
+
+## Demographic information (Selected sample) {.tabset}
+
+### Gender
+
+```{r include = T}
+library(plotly)
+table(pre_df_sel$P_gender, useNA="always")
+lbls <- c("Male", "Female", "Other", "NA")
+
+count_df <- count(pre_df_sel, vars = "P_gender", wt_var = NULL) %>%
+  .[2] %>% unlist(.) 
+
+
+df_pie <- as_tibble(cbind(count_df, lbls))
+
+fig <- plot_ly(df_pie, labels = ~lbls, values = ~count_df, type = 'pie')
+fig_pie <- fig %>% layout(title = 'Gender',
+         xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+fig_pie
+```
+
+### Age 
+
+```{r include = T}
+pre_df_sel$P_age <- as.numeric(pre_df_sel$P_age)
+# make all above 80 NA
+pre_df_sel$P_age[pre_df_sel$P_age > 80] = NA
+
+mean(pre_df_sel$P_age, na.rm = T)
+
+hist(pre_df_sel$P_age, main = "Age", xlab = "Age", ylab = "Count", breaks = "Sturges")
+```
+
+### Native language English or other 
+
+```{r include = T}
+library(plotly)
+table(pre_df_sel$P_lang, useNA="always")
+lbls <- c("English", "Other", "NA")
+
+count_df <- count(pre_df_sel, vars = "P_lang", wt_var = NULL) %>%
+  .[2] %>% unlist(.) 
+
+
+df_pie <- as_tibble(cbind(count_df, lbls))
+
+fig <- plot_ly(df_pie, labels = ~lbls, values = ~count_df, type = 'pie')
+fig_pie <- fig %>% layout(title = 'Native language',
+         xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+fig_pie
+
+```
+
+## Export white list 
+```{r}
+nrow(pre_df_sel)
+
+pre_df_sel <- pre_df_sel[!duplicated(pre_df_sel$P_ID), ]
+
+PID <- pre_df_sel %>% dplyr::select(matches("P_ID"))
+
+write.csv(PID, "whitelist_p.csv", row.names=FALSE)
+```
+
+# T1 sample selection 
+
+```{r}
+files <- dir(getwd(), pattern = "\\.sav$", full.names = FALSE) 
+df_list <- vector("list", length(files))
+names(df_list) <- files
+read_in <- function(df = files) {
+  for (fname in df) {
+    df_list[[fname]] <- haven::read_sav(fname, encoding = NULL, user_na = FALSE, col_select = NULL,skip = 0, n_max = Inf, .name_repair = "unique") 
+  }
+    names(df_list) <- gsub(".sav","",names(df_list))
+    ff <- df_list
+}
+
+
+df_list <- read_in(files)
+
+list2env(df_list,envir=.GlobalEnv)
+
+pre_df <- as.data.frame(Grad2_Preselection) %>% 
+  dplyr::rename(
+    DurationT1 = Duration__in_seconds_
+    )
+
+T1 <- as.data.frame(Grad2_T1) %>% 
+  dplyr::rename(
+    DurationT1 = Duration__in_seconds_
+    )
+
+T1_2 <- as.data.frame(Grad2_T1_2) %>% 
+  dplyr::rename(
+    DurationT1 = Duration__in_seconds_
+    )
+
+T1_df <- rbind(T1, T1_2)
+
+```
+
+## Export white list 
+
+```{r}
+nrow(T1_df)
+
+T1_sel <- T1_df[!duplicated(T1_df$t1id), ]
+
+T1_PID <- T1_sel %>% dplyr::select(matches("t1id")) 
+T1_PID <- T1_PID[grep("5", T1_PID$t1id), ]
+T1_PID <- T1_PID[-c(1:2)]
+
+write.csv(T1_PID, "whitelist_t1.csv", row.names=FALSE)
+```
+
